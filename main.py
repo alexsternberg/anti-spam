@@ -19,9 +19,10 @@ import numpy as np
 import itertools
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
 from Tkinter import *
+import ttk
 
 
 
@@ -29,18 +30,24 @@ messages_dir_train = """C:\\TRAINING\\"""
 messages_dir_test = """C:\\TESTING\\"""
 labels_filename = """c:\\SPAMTrain.label"""
 
+labels = []
+filenames = []
+training_messages = []
+testing_messages = []
+
+
+def load_messages(name):
+    p = Parser()
+    message = p.parse(open(join(messages_dir_train,name)))
+    training_messages.append(message)
+
 class Classifier():
     def __init__(self):
         self.clf = LinearSVC()
         self.vect = TfidfVectorizer()
         self.extract = None
 
-    def train(self, messages, labels):
-        text = []
-        for m in messages:
-            s = BeautifulSoup(m.as_string())
-            text.append(s.get_text())
-        features = self.vect.fit_transform(text)
+    def train(self, features):
         self.clf.fit(features,np.array(labels))
 
     def teach(self, message, label):
@@ -54,32 +61,75 @@ class Classifier():
 
 class Application(Frame):
     def predict(self):
-        print "hit predict"
+        #print "hit predict"
         p = Parser()
-        message = p.parse(self.T.get())
-        if classifier.get_class(message)[0] == '0':
+        message = p.parsestr(self.T.get("1.0",END))
+        if self.cls.get_class(message)[0] == '0':
             print "Spam"
-        else: print "Ham"
+            self.TEXT.configure(text="SPAM", fg="white", bg="red")
+            app.update()
+        else:
+            print "Ham"
+            self.TEXT.configure(text="HAM", fg="white", bg="green")
+            app.update()
+
+    def train(self):
+        print "loading messages"
+        for name in filenames:
+            load_messages(name)
+            self.PG.step(1)
+            app.update()
+        self.cls = Classifier()
+        print"parsing messages"
+        text = []
+        for m in training_messages:
+            s = BeautifulSoup(m.as_string())
+            text.append(s.get_text())
+            self.PG.step(1)
+            app.update()
+        print "building vectorizer"
+        features = self.cls.vect.fit_transform(text)
+        self.PG.step(500)
+        app.update()
+        print "training machine"
+        self.cls.train(features)
+        self.PG.step(500)
+        app.update()
+        print "done!"
 
     def createWidgets(self):
         self.S = Scrollbar(self)
-        self.T = Text(self, height=50, width=50)
+        self.T = Text(self, height=20, width=50)
         self.S.pack(side=RIGHT, fill=Y)
-        self.T.pack(side=LEFT, fill=Y)
+        self.T.pack(side=TOP, fill=Y)
         self.S.config(command=self.T.yview)
         self.T.config(yscrollcommand=self.S.set)
+
+        self.TEXT = Label(self, text="WAIT", bg="grey", fg = "black")
+        self.TEXT.pack(side=LEFT)
+
         self.QUIT = Button(self)
         self.QUIT["text"] = "QUIT"
         self.QUIT["fg"]   = "red"
         self.QUIT["command"] =  self.quit
+        self.QUIT.pack(side=RIGHT)
 
-        self.QUIT.pack({"side": "bottom"})
+        self.TRAIN = Button(self)
+        self.TRAIN["text"] = "Train",
+        self.TRAIN["command"] = self.train
 
-        self.predict = Button(self)
-        self.predict["text"] = "Predict",
-        self.predict["command"] = self.predict
+        self.TRAIN.pack(side=RIGHT)
 
-        self.predict.pack({"side": "bottom"})
+        self.PREDICT = Button(self)
+        self.PREDICT["text"] = "Predict",
+        self.PREDICT["command"] = self.predict
+
+        self.PREDICT.pack(side=LEFT)
+
+
+
+        self.PG = ttk.Progressbar(orient=HORIZONTAL, length=450, mode='determinate', maximum=2*len(labels)+1000)
+        self.PG.pack(side=BOTTOM)
 
     def __init__(self, master=None):
         Frame.__init__(self, master)
@@ -90,28 +140,25 @@ classifier = Classifier()
 
 def main():
     fignum = 1
-    labels = []
-    training_messages = []
-    testing_messages = []
     print "getting messages and labels"
     for line in open(labels_filename):
         m = re.match('(?P<label>[01]{1}) (?P<filename>.+\.eml)', line)
         if (m):
             #print "got match: " + m.group('filename') + "(" + m.group('label') + ")"
             labels.append(m.group('label'))
-            p = Parser()
-            message = p.parse(open(join(messages_dir_train,m.group('filename'))))
-            if isinstance(message, list):
-                for m in message:
-                    training_messages.append(m)
-                    labels.append(m.group('label'))
-            else:
-                training_messages.append(message)
+            filenames.append(m.group('filename'))
 
     #print training_messages
 
-    classifier.train(training_messages, labels)
+    #classifier.train(training_messages, labels)
 
+
+
+if __name__ == '__main__':
+    main()
+
+def p():
+    p = Parser()
     for file in os.listdir(messages_dir_test):
         message = p.parse(open(join(messages_dir_test,file)))
         if isinstance(message, list):
@@ -122,17 +169,11 @@ def main():
 
     print classifier.get_class(testing_messages[10])
 
-    root = Tk()
-    app = Application(master=root)
-    app.mainloop()
-    root.destroy()
-
-if __name__ == '__main__':
-    main()
 
 
 
 
-
-
-
+root = Tk()
+app = Application(master=root)
+app.mainloop()
+root.destroy()
